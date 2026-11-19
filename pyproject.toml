@@ -7,7 +7,10 @@ authors = [
     { name = "MahdhiS", email = "mahdhi.dev@gmail.com" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "ipykernel>=7.4.0",
+    "pandas>=3.1.1",
+]
 
 [project.scripts]
 shelfcast = "shelfcast:main"
