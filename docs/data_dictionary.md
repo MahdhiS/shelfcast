@@ -2,8 +2,9 @@
 
 Source labels:
 - Official: Kaggle competition data page (favorita-grocery-sales-forecasting)
-- Observed: our own profiling (notebooks/01_profiling.ipynb)
+- Observed: our own profiling (notebooks/01_profiling.ipynb) and checks (sql/raw_checks.sql, sql/weather_checks.sql)
 - Unknown: not documented anywhere, do not assume meaning
+- Open-Meteo: Open-Meteo API documentation (used for the two tables we built ourselves: city_coordinates and weather_daily)
 
 ## stores.csv
 One row per store. Key: store_nbr. 54 rows, no nulls.
@@ -82,3 +83,50 @@ Completeness: 1,684 days × 54 stores × 4,036 items = 367,017,696 possible rows
 | item_nbr | int | Item ID, links to items.csv | Official | 4,036 items sold, all present in items.csv (checked). 64 catalogue items never sold |
 | unit_sales | float | Units sold that day. Can be a fraction for items sold by weight | Official | Median 4, 75% of rows ≤ 9, mean 8.55. 7,795 negative rows (returns, Official). 8,191,095 fractional rows (6.5%), all in weighed families: PRODUCE, MEATS, POULTRY, FROZEN FOODS, DELI, SEAFOOD, PREPARED FOODS, plus 2 GROCERY I items and 1 BREAD/BAKERY item. Extremes: max 89,440 (store 39, MEATS item 1976284, 2016-10-07: an item sold on only 25 days, always in the thousands); min −15,372 (store 18, BEVERAGES item 1166474, 2015-06-22: follows a 9,025 spike on 2015-06-19, item normally ~10/day; looks like a recording error, cause unknown) |
 | onpromotion | bool | Whether the item was on promotion that day at that store | Official | False 96,028,767, True 7,810,622, empty 21,657,651 (17.3%; Official says ~16%). All empty values fall between 2013-01-01 and 2014-03-31, so promotions were not recorded before 2014-04-01. Empty means unknown, not "no promotion" |
+## city_coordinates (built by scripts/geocode_cities.py)
+One row per store city. Key: city. 22 rows, no nulls. Built 2026-11-22 from the Open-Meteo Geocoding API, which returns GeoNames places.
+How each city was matched: search the city name in Ecuador, then keep a result only if (1) the name matches, (2) the province matches stores.state, and (3) the place type is a real town (table below). Saved only when all 22 cities had exactly one match. All 22 coordinates were then checked by eye.
+
+| column | dtype | meaning | source | notes |
+|---|---|---|---|---|
+| city | str | City name, exactly as in stores.csv | stores.csv | Join key to stores.city |
+| state | str | Province, exactly as in stores.csv | stores.csv | |
+| geonames_name | str | Official place name in GeoNames | Open-Meteo | Same as city for 19 cities. Differs for 3: Libertad → La Libertad, Playas → General Villamil, Santo Domingo → Santo Domingo de los Colorados (see DI-21) |
+| feature_code | str | GeoNames place type | Open-Meteo (field), GeoNames (definitions) | PPLA 13, PPLA2 5, PPL 3 (La Libertad, General Villamil, Salinas), PPLC 1 (Quito) |
+| latitude | float | Latitude of the town (WGS84) | Open-Meteo | |
+| longitude | float | Longitude of the town (WGS84) | Open-Meteo | Checked by eye (Observed): coast towns −80.4 to −80.95, Andes cities about −78.5 to −79.2, Puyo (edge of the Amazon) −78.0 |
+
+GeoNames feature codes we met, and whether a result with that code was accepted:
+
+| code | meaning | accepted? | where we saw it |
+|---|---|---|---|
+| PPL | populated place (city, town or village) | Yes | La Libertad, General Villamil, Salinas |
+| PPLA | seat of a first-order administrative division (provincial capital) | Yes | e.g. Ambato, Cuenca, Guayaquil |
+| PPLA2 | seat of a second-order administrative division (canton capital) | Yes | e.g. Cayambe, Daule, Manta |
+| PPLA3, PPLA4 | seat of a third- / fourth-order division | Yes | none in the final 22 |
+| PPLC | capital of a country | Yes | Quito |
+| PPLX | section of a populated place (a neighbourhood) | No | a "Libertad" inside Guayaquil |
+| AIRF | airfield | No | "Playas", "Libertad" |
+| AIRP | airport | No | "Ambato / Chachoan" |
+| MT | mountain | No | "Ambato Loma" |
+
+Sources: Open-Meteo Geocoding API docs (https://open-meteo.com/en/docs/geocoding-api: `feature_code` follows GeoNames), GeoNames feature codes used in Ecuador (https://www.geonames.org/EC/statistics.html).
+
+
+## weather_daily (built by scripts/load_weather.py)
+One row per city per day. Key: city + time. 37,136 rows (22 cities × 1,688 days), no nulls (checked).
+Range: 2013-01-01 to 2017-08-15, the same as the sales data.
+Built 2026-11-22 from the Open-Meteo Historical Weather API with `models=era5` and `timezone=America/Guayaquil`.
+
+| column | dtype | meaning | source | notes |
+|---|---|---|---|---|
+| city | str | City, links to city_coordinates.city and stores.city | (ours) | 22 cities |
+| time | date | Day, in Ecuador's local time | Open-Meteo | One weather day = one local calendar day, the same as a sales day |
+| temperature_2m_max | float | Highest air temperature of the day, 2 m above ground, °C | Open-Meteo | City averages from 18.2 (Quito) to 30.8 (Daule) (Observed). Lowland and coastal cities 26.5–30.8, Andes cities 18.2–22.4 |
+| temperature_2m_min | float | Lowest air temperature of the day, 2 m above ground, °C | Open-Meteo | City averages from about 10 (Andes) to 23.7 (Esmeraldas) (Observed). Never above the max (checked) |
+| precipitation_sum | float | Total precipitation of the day (rain + snow), mm | Open-Meteo | Never negative (checked). Model values, not rain gauges: totals look too high in some cities (see DI-22). Use for "rainier than usual for this city", not as true amounts |
+
+What the values are: ERA5 is a reanalysis, a weather model run over the past and corrected with observations. Each value belongs to a grid square of about 25 km (0.25°), not to a weather station. The API answers for the square nearest the city (e.g. Quito: requested −0.230, −78.525, answered −0.25, −78.5 at 2,858 m) and adjusts temperature for the city's elevation. Neighbouring towns can share a square: Salinas and La Libertad have identical precipitation (DI-23).
+Column names are kept as the API returns them in raw; they are renamed in dbt staging.
+
+Sources: Open-Meteo Historical Weather API docs (https://open-meteo.com/en/docs/historical-weather-api). Weather data by [Open-Meteo.com](https://open-meteo.com/) (CC BY 4.0), based on ERA5 from the Copernicus Climate Change Service.

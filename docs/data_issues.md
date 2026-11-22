@@ -1,7 +1,7 @@
 # Data issues
 
 Every data-quality problem found, its impact, and how it is handled.
-Found during profiling ([notebook](../notebooks/01_profiling.ipynb)); column meanings are in the [data dictionary](data_dictionary.md).
+Found during profiling ([notebook](../notebooks/01_profiling.ipynb)) and while building the weather tables (`scripts/geocode_cities.py`, `scripts/load_weather.py`); column meanings are in the [data dictionary](data_dictionary.md).
 
 **Status:** Decided (handling agreed) · Proposed (to be confirmed) · Open (decision pending) · Noted (no action needed)
 
@@ -53,3 +53,16 @@ When a decided issue is implemented, the **Handled in** column names the dbt mod
 | DI-18 | Undocumented codes | Store `type` (A–E) and `cluster` (1–17) have no official meaning; item `class` is a code with no name | Can't be interpreted | Use as plain labels | Noted | |
 | DI-19 | Family name contains commas | `LIQUOR,WINE,BEER` | Awkward in SQL and file exports | Clean family names into a tidy format in staging | Decided | |
 | DI-20 | Catalogue items never sold | 64 of 4,100 items have no sales | Nothing to forecast for them | Exclude from the forecasting list | Noted | |
+## city_coordinates (geocoding, built by us)
+
+| ID | Issue | Evidence | Impact | Handling | Status | Handled in |
+|---|---|---|---|---|---|---|
+| DI-21 | stores.csv uses short everyday city names, GeoNames uses official names | "Libertad": the real town (La Libertad, Guayas, −2.233, −80.910) was not in the top 10 results. "Playas": the exact-name match was an inland village next to Daule (−1.65, −80.02); the coastal town is General Villamil (−2.632, −80.388), with a "Playas" airfield beside it. "Santo Domingo": the provincial capital is "Santo Domingo de los Colorados" | Wrong or missing coordinates, so a city would get another place's weather. The Playas mistake passed all automatic checks and was caught only by looking at the coordinates | Explicit name mapping for these 3 cities; every match also checked for name, province and place type, and all 22 checked by eye | Decided | `scripts/geocode_cities.py` (`search_names`) |
+
+## weather_daily (Open-Meteo, built by us)
+
+| ID | Issue | Evidence | Impact | Handling | Status | Handled in |
+|---|---|---|---|---|---|---|
+| DI-22 | Precipitation totals look too high in some cities | Quito 2,778 mm a year, against about 1,100 mm in a station-based climate summary (other model-based sites give about 2,900–3,000, so it is a weather-model bias, not a loading error). Babahoyo 6,688, Quevedo 6,336 and Guaranda 4,376 also look high (not verified) | Absolute rain amounts are not trustworthy, especially in the Andes; day-to-day changes within a city still carry information | Use relative rain features (rain day yes/no, rain compared with the city's normal) rather than raw millimetres; never quote the amounts as real | Proposed (week 2) | |
+| DI-23 | Weather is a grid-square value, not a station reading | ERA5 squares are about 25 km; Quito's request snapped to −0.25, −78.5. Salinas and La Libertad have identical precipitation | Nearby towns can share identical rain values; local differences inside a square are lost | Expected for reanalysis data; document it | Noted | |
+| DI-24 | The default source mixes datasets, and ERA5-Land has no precipitation in the API | Quito test: `era5_land` had 1,688 of 1,688 precipitation values missing; `era5` complete; the default (`best_match`) took temperature from ERA5-Land and rain from ERA5 | A source switch inside the series could look like a weather change to the model | Pin one source, ERA5, for every variable and every year | Decided | `scripts/load_weather.py` (`models=era5`) |
