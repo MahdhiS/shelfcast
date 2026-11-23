@@ -1,3 +1,5 @@
+-- Reference only: these checks now run as dbt tests (shelfcast_dbt/tests and sources.yml).
+
 -- Expect 22 rows (basis: Day 1 profiling found 22 cities)
 SELECT DISTINCT city, state
 FROM raw.stores

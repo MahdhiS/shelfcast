@@ -5,10 +5,75 @@ sources:
     schema: raw
     tables:
       - name: stores
+        columns:
+          - name: store_nbr
+            data_tests:
+              - unique
+              - not_null
+          - name: type
+            data_tests:
+              - accepted_values:
+                  arguments:
+                    values: ['A', 'B', 'C', 'D', 'E']
+          - name: city
+            data_tests:
+              - relationships:
+                  arguments:
+                    to: source('raw', 'city_coordinates')
+                    field: city
+
       - name: items
+        columns:
+          - name: item_nbr
+            data_tests:
+              - unique
+              - not_null
+          - name: perishable
+            data_tests:
+              - accepted_values:
+                  arguments:
+                    values: [0, 1]
+                    quote: false
+
       - name: oil
+        columns:
+          - name: date
+            data_tests:
+              - unique
+              - not_null
+
       - name: holidays_events
+        columns:
+          - name: type
+            data_tests:
+              - accepted_values:
+                  arguments:
+                    values: ['Holiday', 'Transfer', 'Additional', 'Bridge', 'Work Day', 'Event']
+          - name: locale
+            data_tests:
+              - accepted_values:
+                  arguments:
+                    values: ['Local', 'Regional', 'National']
+
       - name: transactions
+        columns:
+          - name: store_nbr
+            data_tests:
+              - not_null
+              - relationships:
+                  arguments:
+                    to: source('raw', 'stores')
+                    field: store_nbr
+
       - name: train
+
       - name: city_coordinates
+
       - name: weather_daily
+        columns:
+          - name: city
+            data_tests:
+              - relationships:
+                  arguments:
+                    to: source('raw', 'city_coordinates')
+                    field: city

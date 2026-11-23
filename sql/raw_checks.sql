@@ -1,3 +1,7 @@
+-- Reference only: these checks now run as dbt tests (shelfcast_dbt/tests and sources.yml).
+
+
+
 -- Checks that the raw load (Day 2) matches the Day 1 profiling.
 -- Run in pgAdmin while connected to the shelfcast database.
 -- Highlight one query and press F5. Every expected value comes from notebooks/01_profiling.ipynb.
