@@ -1,0 +1,14 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: raw
+    tables:
+      - name: stores
+      - name: items
+      - name: oil
+      - name: holidays_events
+      - name: transactions
+      - name: train
+      - name: city_coordinates
+      - name: weather_daily
