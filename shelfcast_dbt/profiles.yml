@@ -10,3 +10,12 @@ shelfcast_dbt:
       dbname: "{{ env_var('DB_NAME') }}"
       schema: analytics
       threads: 4
+
+    databricks:
+      type: databricks
+      catalog: workspace
+      schema: analytics
+      host: "{{ env_var('DATABRICKS_HOST') }}"
+      http_path: "{{ env_var('DATABRICKS_HTTP_PATH') }}"
+      token: "{{ env_var('DATABRICKS_TOKEN') }}"
+      threads: 4
