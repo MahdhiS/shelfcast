@@ -1,0 +1,23 @@
+models:
+  - name: dim_store
+    description: "One row per store (54), with the city's coordinates."
+    columns:
+      - name: store_nbr
+        data_tests:
+          - unique
+          - not_null
+      - name: latitude
+        description: "From stg_city_coordinates. NULL here means the city join failed."
+        data_tests:
+          - not_null
+      - name: longitude
+        data_tests:
+          - not_null
+
+  - name: dim_item
+    description: "One row per item in the catalogue (4,100), including the 64 never sold."
+    columns:
+      - name: item_nbr
+        data_tests:
+          - unique
+          - not_null
