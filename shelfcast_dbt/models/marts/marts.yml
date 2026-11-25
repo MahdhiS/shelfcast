@@ -76,3 +76,51 @@ models:
                 field: state
               config:
                 where: "locale = 'Regional'"
+
+  - name: fct_weather_daily
+
+    description: "Daily max/min temperature and precipitation per city (ERA5). Rain amounts biased in places (DI-22)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - city
+              - date
+    columns:
+      - name: city
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_store')
+                field: city
+      - name: date
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date    
+
+  - name: fct_transactions
+    description: "Receipts per store per day. A missing row means not recorded, never zero (DI-09, DI-10)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - date
+              - store_nbr
+    columns:
+      - name: store_nbr
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_store')
+                field: store_nbr
+      - name: date
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date
+      - name: transaction_count
+        data_tests:
+          - not_null
