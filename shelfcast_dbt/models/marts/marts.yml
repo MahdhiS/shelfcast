@@ -21,3 +21,32 @@ models:
         data_tests:
           - unique
           - not_null
+
+  - name: dim_date
+    description: "One row per calendar day, 2013-01-01 to 2017-08-31. Only things known in advance: calendar, paydays, national holidays."
+    columns:
+      - name: date
+        data_tests:
+          - unique
+          - not_null
+      - name: day_of_week
+        description: "1 = Monday ... 7 = Sunday (ISO)."
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4, 5, 6, 7]
+                quote: false
+
+  - name: fct_oil_daily
+    description: "WTI oil price for every calendar day, last known price carried forward (DI-06, DI-07). Use only past prices as features (DI-08)."
+    columns:
+      - name: date
+        data_tests:
+          - unique
+          - not_null
+      - name: oil_price
+        description: "NULL only on 2013-01-01: no earlier price exists to carry forward."
+        data_tests:
+          - not_null:
+              config:
+                where: "date > '2013-01-01'"
