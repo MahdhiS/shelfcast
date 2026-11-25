@@ -5,6 +5,9 @@ Source labels:
 - Observed: our own profiling (notebooks/01_profiling.ipynb) and checks (sql/raw_checks.sql, sql/weather_checks.sql)
 - Unknown: not documented anywhere, do not assume meaning
 - Open-Meteo: Open-Meteo API documentation (used for the two tables we built ourselves: city_coordinates and weather_daily)
+- Built: created by our dbt models (`shelfcast_dbt/models/`); the notes say which rule made the column
+
+The raw tables are described first. The warehouse tables that everything downstream reads are under [Warehouse (dbt marts)](#warehouse-dbt-marts) at the end.
 
 ## stores.csv
 One row per store. Key: store_nbr. 54 rows, no nulls.
@@ -130,3 +133,96 @@ What the values are: ERA5 is a reanalysis, a weather model run over the past and
 Column names are kept as the API returns them in raw; they are renamed in dbt staging.
 
 Sources: Open-Meteo Historical Weather API docs (https://open-meteo.com/en/docs/historical-weather-api). Weather data by [Open-Meteo.com](https://open-meteo.com/) (CC BY 4.0), based on ERA5 from the Copernicus Climate Change Service.
+
+## Warehouse (dbt marts)
+Built by dbt in schema `analytics_marts` (PostgreSQL). Raw tables → staging views (`analytics_staging`, renames and type fixes) → intermediate (`analytics_intermediate`) → these marts. Week 2 and the API read only these tables.
+Design: several fact tables at different grains sharing the same dimensions (`dim_date`, `dim_store`).
+
+```
+                      dim_item
+                         │
+dim_store ────────── fct_sales ────────── dim_date
+   │  │                                      │
+   │  └── fct_transactions              fct_oil_daily
+   ├───── fct_weather_daily (via city)
+   └───── dim_place_holidays (via city / state)
+```
+
+Rule for every mart: each table has a primary-key test, and every fact key has a relationships test to its dimension. Marts record what happened; forecast-specific cleaning (zero-filling, negatives, outliers, training window) happens later in the features layer.
+
+### int_holidays_squashed (intermediate, view)
+One row per date per place. Key: date + locale + locale_name (tested). 331 rows: National 160, Regional 24, Local 147.
+Built from holidays_events: the 12 `transferred = True` rows are removed (DI-02), then rows are grouped by date and place so the 7 duplicate pairs become one row each (DI-01). Feeds `dim_date` (National rows) and `dim_place_holidays` (Regional and Local rows).
+
+| column | dtype | meaning | source | notes |
+|---|---|---|---|---|
+| date, locale, locale_name | | As in holidays_events | Official | |
+| is_holiday | bool | A Holiday or a Transfer (the day a moved holiday was really celebrated) | Built | DI-02 |
+| is_additional | bool | Extra day around a holiday (e.g. Christmas Eve) | Built | |
+| is_bridge | bool | Extra day off for a long weekend | Built | DI-03 |
+| is_work_day | bool | Saturday worked to pay back a bridge | Built | DI-03 |
+| is_event | bool | Event (earthquake days, Mother's Day, sports, shopping days) | Built | Mother's Day is an Event, not a Holiday |
+
+### dim_store
+One row per store. Key: store_nbr (tested). 54 rows.
+
+| column | dtype | meaning | source | notes |
+|---|---|---|---|---|
+| store_nbr | int | Store ID | Official | |
+| city, state | str | City and province | Official | |
+| store_type | str | Type A–E | Unknown | Renamed from `type` |
+| store_cluster | int | Favorita's store grouping | Official (meaning), Unknown (method) | Renamed from `cluster` so it can't be confused with our own K-means clusters |
+| latitude, longitude | float | City coordinates | Open-Meteo | From city_coordinates, joined on city. Not null for every store (tested) |
+
+### dim_item
+One row per catalogue item. Key: item_nbr (tested). 4,100 rows, including the 64 items that were never sold (DI-20).
+
+| column | dtype | meaning | source | notes |
+|---|---|---|---|---|
+| item_nbr | int | Item ID | Official | |
+| family | str | Product category | Observed | Tidied to lowercase with underscores, e.g. `LIQUOR,WINE,BEER` → `liquor_wine_beer`, `BREAD/BAKERY` → `bread_bakery` (DI-19). 33 families |
+| item_class | int | Sub-category code | Observed | Renamed from `class` |
+| is_perishable | bool | Perishable item | Official | From `perishable = 1` |
+
+### dim_date
+One row per calendar day, 2013-01-01 to 2017-08-31. Key: date (tested). 1,704 rows.
+Holds only things known in advance (calendar, paydays, national holidays). Ends 16 days after the sales data so a 14-day forecast from the last day has calendar information.
+
+| column | dtype | meaning | source | notes |
+|---|---|---|---|---|
+| date | date | Calendar day | Built | |
+| year, month, day_of_month | int | Parts of the date | Built | |
+| day_of_week | int | 1 = Monday … 7 = Sunday (ISO) | Built | Values 1–7 only (tested) |
+| is_weekend | bool | Saturday or Sunday | Built | |
+| is_payday | bool | 15th or last day of the month | Official (public-sector wages, Kaggle notes) | 112 paydays |
+| is_national_holiday | bool | National Holiday or Transfer day | Built | From int_holidays_squashed. False on the official dates of the 7 transferred national holidays (checked) |
+| is_national_additional, is_national_bridge, is_national_work_day, is_national_event | bool | National Additional / Bridge / Work Day / Event | Built | False on days with no national row |
+
+### dim_place_holidays
+Regional and local holidays. One row per date per place. Key: date + locale + locale_name (tested). 171 rows (Regional 24, Local 147).
+Join: Regional rows on a store's state, Local rows on a store's city. Every locale_name matches a store city or state (tested).
+Columns: date, locale, locale_name and the five flags of int_holidays_squashed.
+
+### fct_sales
+One row per store × item × day with sales. Key: date + store_nbr + item_nbr (tested). 125,497,040 rows.
+Keys and measures only; descriptions come from the dimensions. Indexed on (store_nbr, item_nbr, date) for fast lookups of one store-item's history.
+
+| column | dtype | meaning | source | notes |
+|---|---|---|---|---|
+| date, store_nbr, item_nbr | | Keys | Official | Every store, item and date exists in its dimension (tested) |
+| unit_sales | float | Units (or kg) sold | Official | Kept as recorded: returns stay negative (DI-14), extremes kept (DI-15) |
+| onpromotion | bool | On promotion | Official | NULL before 2014-04-01 = not recorded (DI-13) |
+
+Zero-sales days still have no row (DI-11). Raw `id` is not carried over.
+
+### fct_transactions
+One row per store per day. Key: date + store_nbr (tested). 83,488 rows.
+Columns: date, store_nbr, transaction_count (renamed from `transactions`, never null). A missing row means "not recorded", never zero (DI-09, DI-10).
+
+### fct_oil_daily
+One row per calendar day. Key: date (tested). 1,704 rows.
+Columns: date, oil_price (WTI, US dollars per barrel). Weekends and days with a null price get the last known price (DI-06, DI-07): e.g. Saturday and Sunday 2013-01-05/06 carry Friday's 93.12. Only 2013-01-01 is NULL: oil.csv starts with an empty price and there is no earlier price to carry forward (tested). Kept apart from dim_date because the price is measured each day, not known in advance; features may only use prices from before the forecast date (DI-08).
+
+### fct_weather_daily
+One row per city per day. Key: city + date (tested). 37,136 rows.
+Columns: city, date, temp_max, temp_min, precipitation (renamed from the API names). Every city exists in dim_store and every date in dim_date (tested). Rain amounts are biased in some cities (DI-22).
