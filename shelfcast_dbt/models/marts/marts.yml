@@ -50,3 +50,29 @@ models:
           - not_null:
               config:
                 where: "date > '2013-01-01'"
+
+  - name: dim_place_holidays
+    description: "Regional and local holidays, one row per date per place. Join Regional rows on a store's state and Local rows on its city."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - date
+              - locale
+              - locale_name
+    columns:
+      - name: locale_name
+        description: "A province (Regional) or a city (Local)."
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_store')
+                field: city
+              config:
+                where: "locale = 'Local'"
+          - relationships:
+              arguments:
+                to: ref('dim_store')
+                field: state
+              config:
+                where: "locale = 'Regional'"
