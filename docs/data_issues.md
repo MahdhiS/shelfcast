@@ -13,26 +13,26 @@ When a decided issue is implemented, the **Handled in** column names the dbt mod
 
 | ID | Issue | Evidence | Impact | Handling | Status | Handled in |
 |---|---|---|---|---|---|---|
-| DI-01 | Several rows can share a date and place | 7 date + place pairs (bridge + additional day; earthquake event + another event; Guayaquil 2016-07-24) | Joining sales to holidays would duplicate sales rows (join fan-out) | Squash to one row per date per place, with flags (`is_holiday`, `is_bridge`, …), before joining | Decided | |
-| DI-02 | A transferred holiday's official date is a normal working day | 12 `transferred = True` rows, each paired with a `type = Transfer` row | Flagging the official date as a holiday marks working days as holidays | Treat the `Transfer` date as the holiday and the official date as a normal day | Decided | |
-| DI-03 | Bridge days and make-up Work Days | 5 Bridge days (Mon/Fri) paired with 5 Work Days (Saturdays) | A bridge behaves like a holiday; a work day is a Saturday people work | Separate flags for bridge and work day | Decided | |
-| DI-04 | Inconsistent descriptions | 2 Transfer rows (Cuenca 2017-04-13, Ibarra 2017-09-29) lack the "Traslado" prefix | Rows can't be paired by description text | Pair by place and holiday name, not by description | Noted | |
-| DI-05 | Unexplained transfer | Fundación de Guayaquil moved from Monday 2016-07-25 to Sunday 2016-07-24 | Small, one local holiday | Keep as recorded | Noted | |
+| DI-01 | Several rows can share a date and place | 7 date + place pairs (bridge + additional day; earthquake event + another event; Guayaquil 2016-07-24) | Joining sales to holidays would duplicate sales rows (join fan-out) | Squash to one row per date per place, with flags (`is_holiday`, `is_bridge`, …), before joining | Decided | `int_holidays_squashed` (group by date + place; key test) |
+| DI-02 | A transferred holiday's official date is a normal working day | 12 `transferred = True` rows, each paired with a `type = Transfer` row | Flagging the official date as a holiday marks working days as holidays | Treat the `Transfer` date as the holiday and the official date as a normal day | Decided | `int_holidays_squashed` (transferred rows removed) |
+| DI-03 | Bridge days and make-up Work Days | 5 Bridge days (Mon/Fri) paired with 5 Work Days (Saturdays) | A bridge behaves like a holiday; a work day is a Saturday people work | Separate flags for bridge and work day | Decided | `int_holidays_squashed` (`is_bridge`, `is_work_day` flags) |
+| DI-04 | Inconsistent descriptions | 2 Transfer rows (Cuenca 2017-04-13, Ibarra 2017-09-29) lack the "Traslado" prefix | Rows can't be paired by description text | Pair by place and holiday name, not by description | Noted | `int_holidays_squashed` (no pairing needed: transferred rows dropped, Transfer rows kept) |
+| DI-05 | Unexplained transfer | Fundación de Guayaquil moved from Monday 2016-07-25 to Sunday 2016-07-24 | Small, one local holiday | Keep as recorded | Noted | `int_holidays_squashed` (kept as recorded) |
 
 ## oil.csv
 
 | ID | Issue | Evidence | Impact | Handling | Status | Handled in |
 |---|---|---|---|---|---|---|
-| DI-06 | No rows on weekends | Mon–Fri only, 243–244 rows each | No price for Saturdays and Sundays | Fill with the last known price | Decided | |
-| DI-07 | Null prices on US market holidays | 43 nulls: 42 on NYSE holidays, 1 unexplained (2017-07-03) | Gaps on those dates | Fill with the last known price | Decided | |
+| DI-06 | No rows on weekends | Mon–Fri only, 243–244 rows each | No price for Saturdays and Sundays | Fill with the last known price | Decided | `fct_oil_daily` (last known price) |
+| DI-07 | Null prices on US market holidays | 43 nulls: 42 on NYSE holidays, 1 unexplained (2017-07-03) | Gaps on those dates | Fill with the last known price | Decided | `fct_oil_daily` (last known price) |
 | DI-08 | Extends past the sales data | Runs to 2017-08-31; sales end 2017-08-15 | Those 16 days are unused. Risk of leakage if future prices are used as features | Features use only prices from before the forecast date | Decided | |
 
 ## transactions.csv
 
 | ID | Issue | Evidence | Impact | Handling | Status | Handled in |
 |---|---|---|---|---|---|---|
-| DI-09 | Missing stores in early January 2016 | 2016-01-02: 36 stores, 2016-01-03: none, 2016-01-04: 14; train has normal sales (~100k rows a day) on those days | Transaction counts look artificially low | Treat as missing, not as low | Decided | |
-| DI-10 | Whole days missing | Christmas 2013–2016 and 2016-01-01 (stores closed) | No transactions on those days | Expected: stores closed | Noted | |
+| DI-09 | Missing stores in early January 2016 | 2016-01-02: 36 stores, 2016-01-03: none, 2016-01-04: 14; train has normal sales (~100k rows a day) on those days | Transaction counts look artificially low | Treat as missing, not as low | Decided | `fct_transactions` (gaps left as missing) |
+| DI-10 | Whole days missing | Christmas 2013–2016 and 2016-01-01 (stores closed) | No transactions on those days | Expected: stores closed | Noted | `fct_transactions` (no rows added) |
 
 ## train.csv
 
@@ -51,7 +51,7 @@ When a decided issue is implemented, the **Handled in** column names the dbt mod
 | ID | Issue | Evidence | Impact | Handling | Status | Handled in |
 |---|---|---|---|---|---|---|
 | DI-18 | Undocumented codes | Store `type` (A–E) and `cluster` (1–17) have no official meaning; item `class` is a code with no name | Can't be interpreted | Use as plain labels | Noted | |
-| DI-19 | Family name contains commas | `LIQUOR,WINE,BEER` | Awkward in SQL and file exports | Clean family names into a tidy format in staging | Decided | |
+| DI-19 | Family name contains commas | `LIQUOR,WINE,BEER` | Awkward in SQL and file exports | Clean family names into a tidy format in staging | Decided | `stg_items` |
 | DI-20 | Catalogue items never sold | 64 of 4,100 items have no sales | Nothing to forecast for them | Exclude from the forecasting list | Noted | |
 ## city_coordinates (geocoding, built by us)
 

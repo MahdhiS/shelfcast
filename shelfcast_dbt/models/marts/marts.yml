@@ -124,3 +124,32 @@ models:
       - name: transaction_count
         data_tests:
           - not_null
+
+  - name: fct_sales
+    description: "One row per store, item and day with sales (125,497,040 rows). Returns negative, onpromotion NULL before 2014-04-01, zero-sales days absent (DI-11, DI-13, DI-14)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - date
+              - store_nbr
+              - item_nbr
+    columns:
+      - name: store_nbr
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_store')
+                field: store_nbr
+      - name: item_nbr
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_item')
+                field: item_nbr
+      - name: date
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date
