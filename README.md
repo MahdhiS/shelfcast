@@ -4,15 +4,16 @@
 
 Shelfcast predicts how many units of each product each store will sell over the next 14 days, recommends order quantities, explains unusual demand, and tracks forecast accuracy over time.
 
-> **Status:** in progress. Data engineering done: a tested dbt warehouse (17 models, 46 data tests). Next: exploratory analysis, then forecasting. Results will appear here as they are produced.
+> **Status:** in progress. Data engineering done: a tested dbt warehouse (18 models, 49 data tests) and a PySpark pipeline on Databricks. Next: exploratory analysis, then forecasting. Results will appear here as they are produced.
 
 **Data engineering highlights**
 
 - **ELT pipeline:** 125,497,040 sales rows loaded into PostgreSQL with `COPY`. Every row count is checked against the profiling results.
-- **Tested dbt warehouse:** 17 models in staging, intermediate and marts layers, with 46 data tests (keys, relationships and custom checks).
+- **Tested dbt warehouse:** 18 models in staging, intermediate and marts layers, with 49 data tests (keys, relationships, custom checks and a reconciliation test).
 - **Data quality, documented:** 24 data issues found, each with its evidence, impact and handling in [data_issues.md](docs/data_issues.md).
 - **Second data source from APIs:** 22 store cities geocoded and daily weather loaded, with checks. One geocoding error passed every automatic check and was caught by a manual review.
 - **Two platforms:** the same dbt project connects to PostgreSQL and Databricks. The source tests pass on both.
+- **PySpark on Databricks:** a bronze, silver and gold pipeline rebuilds the daily store × family table from the 125M raw rows. Its row counts match the dbt version in every year ([notebook](databricks/02_pyspark_daily_store_family.ipynb)).
 
 ---
 
@@ -79,6 +80,7 @@ dim_store ────────── fct_sales ─────────�
 | Table | Grain | Holds |
 |---|---|---|
 | `fct_sales` | store × item × day | Units sold and promotion flag, exactly as recorded |
+| `fct_sales_daily_store_family` | store × family × day | Daily totals per product family, a summary of `fct_sales` (2.06M rows) with a reconciliation test |
 | `fct_transactions` | store × day | Receipts per store |
 | `fct_oil_daily` | day | Oil price, last known price carried over weekends |
 | `fct_weather_daily` | city × day | Max/min temperature and precipitation |
@@ -99,18 +101,22 @@ Every table has a primary-key test, and every fact key is tested against its dim
 - [x] Profiling of all six raw files ([notebook](notebooks/01_profiling.ipynb), [data dictionary](docs/data_dictionary.md))
 - [x] Raw data loaded into PostgreSQL (125,497,040 sales rows, all counts checked against profiling)
 - [x] City coordinates and historical weather for 22 cities
-- [x] dbt warehouse: staging, intermediate and marts with 46 data tests and docs (also connected to Databricks)
+- [x] dbt warehouse: staging, intermediate and marts with 49 data tests and docs (also connected to Databricks)
+- [x] Raw data loaded into Databricks from Kaggle, and a PySpark pipeline (bronze, silver, gold) reconciled with the dbt warehouse ([notebooks](databricks/))
 - [ ] Exploratory analysis
 - [ ] Baseline and LightGBM forecast, tracked in MLflow
 - [ ] Product clustering, spike classifier with SHAP, order quantities
 - [ ] FastAPI service and monitoring dashboard
-- [ ] Databricks version, Docker, CI, live demo *(raw data already loaded into Databricks and checked against PostgreSQL)*
+- [ ] Full dbt warehouse on Databricks, Docker, CI, live demo
 
 ## Repo layout
 
 ```
 shelfcast/
 ├── data/raw/            # Kaggle CSVs (not in git)
+├── databricks/          # notebooks that run on Databricks
+│   ├── 01_load_raw_favorita.ipynb          # Kaggle files into Databricks tables (bronze)
+│   └── 02_pyspark_daily_store_family.ipynb # PySpark pipeline: bronze, silver, gold, reconciled
 ├── docs/
 │   ├── data_dictionary.md   # what every column means, and where that comes from
 │   └── data_issues.md       # data-quality problems and how each is handled
@@ -158,6 +164,7 @@ shelfcast/
    ```
    After the first build, `dbt build --exclude fct_sales` rebuilds everything except the 125M-row table.
    For the Databricks version, fill in the `DATABRICKS_*` values in `.env` and add `--target databricks`.
+6. **Databricks notebooks (optional).** Import the notebooks in `databricks/` into a Databricks workspace and run them in order. `01` needs your own Kaggle API token: paste it only while the cell runs, and never commit it.
 
 ## Documentation
 
@@ -168,4 +175,4 @@ shelfcast/
 
 Mahdhi Shafraz, Data Science undergraduate, SLIIT. [LinkedIn](https://www.linkedin.com/in/mahdhi-shafraz/)
 
-Built with AI assistance (Claude) as a pair programmer. Every design decision and data issue is documented in this repo.
+Every design decision and data issue is documented in this repo.
