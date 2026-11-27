@@ -153,3 +153,18 @@ models:
               arguments:
                 to: ref('dim_date')
                 field: date
+
+  - name: fct_sales_daily_store_family
+    description: "One row per date, store and product family: a summary of fct_sales. unit_sales is an exact decimal sum, returns included as negatives. items_on_promotion is NULL before 2014-04-01 (not recorded, DI-13)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - date
+              - store_nbr
+              - family
+    columns:
+      - name: family
+        description: "From dim_item. NULL here means the item join failed."
+        data_tests:
+          - not_null 
