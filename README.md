@@ -4,7 +4,7 @@
 
 Shelfcast predicts how many units of each product each store will sell over the next 14 days, recommends order quantities, explains unusual demand, and tracks forecast accuracy over time.
 
-> **Status:** in progress. Data engineering done: a tested dbt warehouse (18 models, 49 data tests) and a PySpark pipeline on Databricks. Next: exploratory analysis, then forecasting. Results will appear here as they are produced.
+> **Status:** in progress. Data engineering done: a tested dbt warehouse (18 models, 49 data tests). Next: exploratory analysis, then forecasting. Results will appear here as they are produced.
 
 **Data engineering highlights**
 
@@ -12,8 +12,7 @@ Shelfcast predicts how many units of each product each store will sell over the 
 - **Tested dbt warehouse:** 18 models in staging, intermediate and marts layers, with 49 data tests (keys, relationships, custom checks and a reconciliation test).
 - **Data quality, documented:** 24 data issues found, each with its evidence, impact and handling in [data_issues.md](docs/data_issues.md).
 - **Second data source from APIs:** 22 store cities geocoded and daily weather loaded, with checks. One geocoding error passed every automatic check and was caught by a manual review.
-- **Two platforms:** the same dbt project connects to PostgreSQL and Databricks. The source tests pass on both.
-- **PySpark on Databricks:** a bronze, silver and gold pipeline rebuilds the daily store × family table from the 125M raw rows. Its row counts match the dbt version in every year ([notebook](databricks/02_pyspark_daily_store_family.ipynb)).
+- **Two platforms:** the raw data is also loaded into Databricks straight from Kaggle ([notebook](databricks/01_load_raw_favorita.ipynb)). The same dbt project connects to PostgreSQL and Databricks, and the source tests pass on both.
 
 ---
 
@@ -102,7 +101,7 @@ Every table has a primary-key test, and every fact key is tested against its dim
 - [x] Raw data loaded into PostgreSQL (125,497,040 sales rows, all counts checked against profiling)
 - [x] City coordinates and historical weather for 22 cities
 - [x] dbt warehouse: staging, intermediate and marts with 49 data tests and docs (also connected to Databricks)
-- [x] Raw data loaded into Databricks from Kaggle, and a PySpark pipeline (bronze, silver, gold) reconciled with the dbt warehouse ([notebooks](databricks/))
+- [x] Raw data loaded into Databricks straight from Kaggle, row counts checked against PostgreSQL ([notebook](databricks/01_load_raw_favorita.ipynb))
 - [ ] Exploratory analysis
 - [ ] Baseline and LightGBM forecast, tracked in MLflow
 - [ ] Product clustering, spike classifier with SHAP, order quantities
@@ -115,8 +114,7 @@ Every table has a primary-key test, and every fact key is tested against its dim
 shelfcast/
 ├── data/raw/            # Kaggle CSVs (not in git)
 ├── databricks/          # notebooks that run on Databricks
-│   ├── 01_load_raw_favorita.ipynb          # Kaggle files into Databricks tables (bronze)
-│   └── 02_pyspark_daily_store_family.ipynb # PySpark pipeline: bronze, silver, gold, reconciled
+│   └── 01_load_raw_favorita.ipynb   # Kaggle files into Databricks tables
 ├── docs/
 │   ├── data_dictionary.md   # what every column means, and where that comes from
 │   └── data_issues.md       # data-quality problems and how each is handled
@@ -164,7 +162,7 @@ shelfcast/
    ```
    After the first build, `dbt build --exclude fct_sales` rebuilds everything except the 125M-row table.
    For the Databricks version, fill in the `DATABRICKS_*` values in `.env` and add `--target databricks`.
-6. **Databricks notebooks (optional).** Import the notebooks in `databricks/` into a Databricks workspace and run them in order. `01` needs your own Kaggle API token: paste it only while the cell runs, and never commit it.
+6. **Databricks (optional).** Import `databricks/01_load_raw_favorita.ipynb` into a Databricks workspace and run it. It needs your own Kaggle API token: paste it only while the cell runs, and never commit it.
 
 ## Documentation
 
