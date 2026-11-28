@@ -3,7 +3,7 @@
 Every data-quality problem found, its impact, and how it is handled.
 Found during profiling ([notebook](../notebooks/01_profiling.ipynb)) and while building the weather tables (`scripts/geocode_cities.py`, `scripts/load_weather.py`); column meanings are in the [data dictionary](data_dictionary.md).
 
-**Status:** Decided (handling agreed) · Proposed (to be confirmed) · Open (decision pending) · Noted (no action needed)
+**Status:** Decided (handling agreed); Proposed (to be confirmed); Open (decision pending); Noted (no action needed)
 
 When a decided issue is implemented, the **Handled in** column names the dbt model, test or script that deals with it.
 
@@ -38,13 +38,14 @@ When a decided issue is implemented, the **Handled in** column names the dbt mod
 
 | ID | Issue | Evidence | Impact | Handling | Status | Handled in |
 |---|---|---|---|---|---|---|
-| DI-11 | Zero-sales days have no row | Official; only 34% of the 367M possible store × item × day rows exist | A missing row can mean zero sales, a store not open yet, or an item not on sale yet | Fill with 0 only inside each store-item's active period | Open (week 2) | |
+| DI-11 | Zero-sales days have no row | Official; only 34% of the 367M possible store × item × day rows exist | A missing row can mean zero sales, a store not open yet, or an item not on sale yet | Fill with 0 only inside each store-item's active period | Open (forecasting stage) | |
 | DI-12 | Stores opened during the period | 8 stores opened after 2013; store 52 on 2017-04-20 (118 days of history) | Rows before opening aren't zero sales; store 52 has little history | No zero-filling before a store's first day; expect weaker forecasts for store 52 | Decided | |
 | DI-13 | Promotions not recorded before 2014-04-01 | `onpromotion` empty for 100% of rows before that date and none after (21.66M rows, 17.3%) | Empty means unknown, not "no promotion" | Start the training window on 2014-04-01 (still 3.4 years and three Christmases) | Proposed | |
 | DI-14 | Negative sales (returns) | 7,795 rows | Demand can't be negative | Count negatives as 0 for the forecast | Proposed | |
-| DI-15 | Extreme values | Max 89,440 (store 39, MEATS item 1976284, sold on only 25 days); min −15,372 (store 18, BEVERAGES item 1166474, 3 days after a 9,025 spike; item normally ~10 a day) | Distorts training | Cap or flag | Open (week 2) | |
+| DI-15 | Extreme values | Max 89,440 (store 39, MEATS item 1976284, sold on only 25 days); min −15,372 (store 18, BEVERAGES item 1166474, 3 days after a 9,025 spike; item normally ~10 a day) | Distorts training | Cap or flag | Open (forecasting stage) | |
 | DI-16 | Fractional sales mean kilograms | 8.19M rows (6.5%), all in weighed families (PRODUCE, MEATS, POULTRY, …) | One overall error figure mixes kilograms with pieces | Report accuracy per family as well as overall | Decided | |
 | DI-17 | Christmas missing every year | No rows on 2013–2016-12-25 | Stores closed | Expected | Noted | |
+| DI-25 | `unit_sales` is a 4-byte float | Stored as `real` in PostgreSQL and `FLOAT` on Databricks: about 7 significant digits. Total sales are 1,073,610,268.79 units; at that size a 4-byte float can only store steps of 64 | Sums of `unit_sales` lose small amounts, and the PostgreSQL sum of a `real` column is itself a `real` | Cast to an exact decimal (`dbt.type_numeric()`: numeric(28,6) on PostgreSQL, decimal(28,6) on Databricks) before summing | Decided | `fct_sales_daily_store_family` (reconciliation test `assert_sales_daily_store_family_reconciles`) |
 
 ## stores.csv and items.csv
 
@@ -63,6 +64,6 @@ When a decided issue is implemented, the **Handled in** column names the dbt mod
 
 | ID | Issue | Evidence | Impact | Handling | Status | Handled in |
 |---|---|---|---|---|---|---|
-| DI-22 | Precipitation totals look too high in some cities | Quito 2,778 mm a year, against about 1,100 mm in a station-based climate summary (other model-based sites give about 2,900–3,000, so it is a weather-model bias, not a loading error). Babahoyo 6,688, Quevedo 6,336 and Guaranda 4,376 also look high (not verified) | Absolute rain amounts are not trustworthy, especially in the Andes; day-to-day changes within a city still carry information | Use relative rain features (rain day yes/no, rain compared with the city's normal) rather than raw millimetres; never quote the amounts as real | Proposed (week 2) | |
+| DI-22 | Precipitation totals look too high in some cities | Quito 2,778 mm a year, against about 1,100 mm in a station-based climate summary (other model-based sites give about 2,900–3,000, so it is a weather-model bias, not a loading error). Babahoyo 6,688, Quevedo 6,336 and Guaranda 4,376 also look high (not verified) | Absolute rain amounts are not trustworthy, especially in the Andes; day-to-day changes within a city still carry information | Use relative rain features (rain day yes/no, rain compared with the city's normal) rather than raw millimetres; never quote the amounts as real | Proposed (forecasting stage) | |
 | DI-23 | Weather is a grid-square value, not a station reading | ERA5 squares are about 25 km; Quito's request snapped to −0.25, −78.5. Salinas and La Libertad have identical precipitation | Nearby towns can share identical rain values; local differences inside a square are lost | Expected for reanalysis data; document it | Noted | |
 | DI-24 | The default source mixes datasets, and ERA5-Land has no precipitation in the API | Quito test: `era5_land` had 1,688 of 1,688 precipitation values missing; `era5` complete; the default (`best_match`) took temperature from ERA5-Land and rain from ERA5 | A source switch inside the series could look like a weather change to the model | Pin one source, ERA5, for every variable and every year | Decided | `scripts/load_weather.py` (`models=era5`) |

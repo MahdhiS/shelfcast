@@ -135,7 +135,7 @@ Column names are kept as the API returns them in raw; they are renamed in dbt st
 Sources: Open-Meteo Historical Weather API docs (https://open-meteo.com/en/docs/historical-weather-api). Weather data by [Open-Meteo.com](https://open-meteo.com/) (CC BY 4.0), based on ERA5 from the Copernicus Climate Change Service.
 
 ## Warehouse (dbt marts)
-Built by dbt in schema `analytics_marts` (PostgreSQL). Raw tables → staging views (`analytics_staging`, renames and type fixes) → intermediate (`analytics_intermediate`) → these marts. Week 2 and the API read only these tables.
+Built by dbt in schema `analytics_marts` (PostgreSQL). Raw tables → staging views (`analytics_staging`, renames and type fixes) → intermediate (`analytics_intermediate`) → these marts. The forecasting model and the API read only these tables.
 Design: several fact tables at different grains sharing the same dimensions (`dim_date`, `dim_store`).
 
 ```
@@ -214,6 +214,20 @@ Keys and measures only; descriptions come from the dimensions. Indexed on (store
 | onpromotion | bool | On promotion | Official | NULL before 2014-04-01 = not recorded (DI-13) |
 
 Zero-sales days still have no row (DI-11). Raw `id` is not carried over.
+
+### fct_sales_daily_store_family
+An aggregate of fct_sales: one row per store × product family × day. Key: date + store_nbr + family (tested). 2,061,903 rows, 69% of the 3,000,888 possible combinations (a row exists only if at least one item in that family sold that day).
+Built for analysis and reporting, which need totals rather than single items. No new information: every value can be recomputed from fct_sales and dim_item.
+
+| column | dtype | meaning | source | notes |
+|---|---|---|---|---|
+| date, store_nbr | | Keys | Official | As in fct_sales |
+| family | str | Product family | Observed | From dim_item (left join). Never NULL (tested) |
+| unit_sales | decimal(28,6) | Total units (or kg) sold | Built | Exact decimal sum, because `unit_sales` in fct_sales is a 4-byte float (DI-25). Returns included as negatives |
+| items_recorded | int | Number of items with a sales row that day | Built | Its total equals the fct_sales row count, 125,497,040 |
+| items_on_promotion | int | Number of those items on promotion | Built | NULL before 2014-04-01: promotions not recorded (DI-13) |
+
+Reconciliation (tested): the total of `items_recorded` equals the number of rows in fct_sales, and the total of `unit_sales` equals the fct_sales total exactly.
 
 ### fct_transactions
 One row per store per day. Key: date + store_nbr (tested). 83,488 rows.
